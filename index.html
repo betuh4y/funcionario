@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistema de Vendas (PDV) - Batavo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/jspdf-autotable@3.8.0/dist/jspdf.plugin.autotable.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 10px;
+        background-color: #f5f5f5;
+      }
+
+      header img {
+        display: block;
+        margin: 0 auto;
+        max-width: 150px;
+      }
+
+      #authSection,
+      #saleSection {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 15px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      input,
+      select,
+      button,
+      textarea {
+        width: 100%;
+        padding: 10px;
+        margin: 5px 0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 16px;
+        box-sizing: border-box;
+      }
+
+      button {
+        background-color: #28a745;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      button:hover {
+        background-color: #218838;
+      }
+
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+      }
+
+      .modal-content {
+        background: #fff;
+        margin: 10% auto;
+        padding: 20px;
+        max-width: 90%;
+        width: 400px;
+        border-radius: 8px;
+        position: relative;
+      }
+
+      .close-button {
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        font-size: 20px;
+        cursor: pointer;
+      }
+
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .filters select,
+      .filters input {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .product-card {
+        background: #f9f9f9;
+        padding: 10px;
+        margin: 5px 0;
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .quantity-controls {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+      }
+
+      .quantity-controls input {
+        width: 60px;
+        text-align: center;
+      }
+
+      .quantity-controls button {
+        width: 40px;
+        padding: 5px;
+      }
+
+      .sale-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px 0;
+        border-bottom: 1px solid #eee;
+      }
+
+      .remove-item-btn {
+        background-color: #dc3545;
+        padding: 5px 10px;
+        font-size: 14px;
+      }
+
+      .remove-item-btn:hover {
+        background-color: #c82333;
+      }
+
+      #currentSaleTotal {
+        font-weight: bold;
+        font-size: 18px;
+        margin: 10px 0;
+      }
+
+      @media (max-width: 600px) {
+
+        input,
+        select,
+        button,
+        textarea {
+          font-size: 14px;
+          padding: 8px;
+        }
+
+        .modal-content {
+          width: 95%;
+          margin: 5% auto;
+        }
+
+        .product-card h4 {
+          font-size: 16px;
+        }
+
+        .product-card p {
+          font-size: 14px;
+        }
+
+        .quantity-controls input {
+          width: 50px;
+        }
+
+        .quantity-controls button {
+          width: 35px;
+          font-size: 14px;
+        }
+      }
+    </style>
+    <script type="text/javascript" src="./index.js" defer=""></script>
+    <link rel="stylesheet" href="./index.css">
+  </head>
+
+  <body>
+    <header>
+      <a href="https://ibb.co/7dV11YHH">
+        <img src="https://pbs.twimg.com/media/GwGcjEdWIAAA4bp?format=png&amp;name=small" alt="Batavo Logo">
+      </a>
+    </header>
+
+    <div id="authSection">
+      <h3>Login / Cadastro</h3>
+      <input type="email" id="email" placeholder="Email">
+      <input type="password" id="password" placeholder="Senha">
+      <button id="registerBtn">Cadastrar</button>
+      <button id="loginBtn">Entrar</button>
+    </div>
+
+    <div id="saleSection" style="display:none;">
+      <button id="logoutBtn">Sair</button>
+      <hr>
+      <h3>Nova Venda</h3>
+      <div class="filters">
+        <select id="filterCategorySale">
+          <option value="Todas">Todas as Categorias</option>
+        </select>
+        <select id="selectClientSale">
+          <option value="">Sem Cliente</option>
+        </select>
+        <input type="text" id="barcodeInput" placeholder="Gramatura (150 *) ou Código (2#123456)">
+      </div>
+      <p>Pressione <strong>Enter</strong> após inserir gramatura (ex.: 150 *), quantidade#código (ex.: 2#123456) ou código, ou selecione produtos abaixo.</p>
+      <div id="productSelection">
+        <p>Selecione uma categoria para visualizar os produtos.</p>
+      </div>
+      <div id="activeSaleItems">
+        <p>Nenhum item adicionado.</p>
+      </div>
+      <div id="currentSaleTotal">Total: R$ 0,00</div>
+      <div id="saleActions">
+        <button id="finalizarVendaBtn" disabled="">Finalizar Venda</button>
+        <button id="cancelSaleBtn">Cancelar Venda</button>
+      </div>
+
+      <div id="paymentModal" class="modal">
+        <div class="modal-content">
+          <span class="close-button">×</span>
+          <h3>Finalizar Venda</h3>
+          <p><strong>Cliente:</strong> <span id="modalClientName">Sem Cliente</span></p>
+          <p><strong>Total:</strong> <span id="modalTotalValue">R$ 0,00</span></p>
+          <label>Desconto (R$ ou %):</label>
+          <input type="text" id="discountInput" placeholder="Ex: 10 ou 10%">
+          <p><strong>Total com Desconto:</strong> <span id="modalTotalWithDiscount">R$ 0,00</span></p>
+          <label>Forma de Pagamento:</label>
+          <select id="modalPaymentType">
+            <option value="Pix">Pix</option>
+            <option value="Dinheiro">Dinheiro</option>
+            <option value="Credito">Crédito</option>
+            <option value="Debito">Débito</option>
+            <option value="Outro">Outro</option>
+          </select>
+          <div id="amountGivenContainer" style="display:none;">
+            <label>Valor Recebido:</label>
+            <input type="number" id="amountGiven" placeholder="Valor pago" step="0.01">
+            <p>Troco: <span id="changeDue">R$ 0,00</span></p>
+          </div>
+          <label>Observações:</label>
+          <textarea id="saleObservations" placeholder="Adicione observações sobre a venda (ex.: entrega, embalagem especial)"></textarea>
+          <button id="confirmPaymentBtn">Confirmar Pagamento</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import {
+        initializeApp
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+      import {
+        getAuth,
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        onAuthStateChanged,
+        signOut
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+      import {
+        getDatabase,
+        ref,
+        push,
+        set,
+        update,
+        onValue
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyDJBdK9I-jtg9ujTc9Xsxr-hnPfkId4wIU",
+        authDomain: "pdv1-77632.firebaseapp.com",
+        databaseURL: "https://pdv1-77632-default-rtdb.firebaseio.com",
+        projectId: "pdv1-77632",
+        storageBucket: "pdv1-77632.firebasestorage.app",
+        messagingSenderId: "246033791117",
+        appId: "1:246033791117:web:7b70b511ea8d8c5ba1cac4",
+        measurementId: "G-NTG13SG6VM"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth();
+      const db = getDatabase();
+
+      let activeSaleItems = [];
+      let productsDatabase = {};
+      let categoriesDatabase = {};
+      let clientsDatabase = {};
+      let tempWeight = null;
+      let appliedDiscount = 0;
+      let selectedCategory = "Todas";
+      let selectedClient = "";
+
+      // Inicializar foco no campo de código de barras
+      document.getElementById("barcodeInput").focus();
+
+      // Função para atualizar a data da venda
+      function updateDataVenda() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+      }
+
+      // Autenticação
+      document.getElementById("registerBtn").onclick = () => {
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value.trim();
+        if (!email || !password) {
+          alert("Preencha email e senha.");
+          return;
+        }
+        if (password.length < 6) {
+          alert("A senha deve ter pelo menos 6 caracteres.");
+          return;
+        }
+        createUserWithEmailAndPassword(auth, email, password)
+          .then((userCredential) => {
+            alert("Usuário registrado com sucesso!");
+            document.getElementById("email").value = "";
+            document.getElementById("password").value = "";
+          })
+          .catch((err) => {
+            let message = "Erro ao cadastrar: ";
+            switch (err.code) {
+              case "auth/email-already-in-use":
+                message += "Este email já está em uso.";
+                break;
+              case "auth/invalid-email":
+                message += "Email inválido.";
+                break;
+              default:
+                message += err.message;
+            }
+            alert(message);
+          });
+      };
+
+      document.getElementById("loginBtn").onclick = () => {
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value.trim();
+        if (!email || !password) {
+          alert("Preencha email e senha.");
+          return;
+        }
+        signInWithEmailAndPassword(auth, email, password)
+          .then((userCredential) => {
+            alert("Login realizado com sucesso!");
+            document.getElementById("email").value = "";
+            document.getElementById("password").value = "";
+            loadProductsFromDatabase();
+            loadCategoriesFromDatabase();
+            loadClientsFromDatabase();
+          })
+          .catch((err) => {
+            let message = "Erro ao entrar: ";
+            switch (err.code) {
+              case "auth/user-not-found":
+              case "auth/wrong-password":
+                message += "Email ou senha incorretos.";
+                break;
+              case "auth/invalid-email":
+                message += "Email inválido.";
+                break;
+              default:
+                message += err.message;
+            }
+            alert(message);
+          });
+      };
+
+      document.getElementById("logoutBtn").onclick = () => {
+        signOut(auth)
+          .then(() => {
+            alert("Logout realizado com sucesso!");
+          })
+          .catch((err) => alert("Erro ao sair: " + err.message));
+      };
+
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          document.getElementById("authSection").style.display = "none";
+          document.getElementById("saleSection").style.display = "block";
+          loadProductsFromDatabase();
+          loadCategoriesFromDatabase();
+          loadClientsFromDatabase();
+          cancelActiveSale();
+        } else {
+          document.getElementById("authSection").style.display = "block";
+          document.getElementById("saleSection").style.display = "none";
+          document.getElementById("email").focus();
+        }
+      });
+
+      // Carregar categorias
+      function loadCategoriesFromDatabase() {
+        const user = auth.currentUser;
+        if (user) {
+          const categoriesRef = ref(db, `categorias/${user.uid}`);
+          onValue(categoriesRef, (snapshot) => {
+            categoriesDatabase = snapshot.exists() ? snapshot.val() : {};
+            updateCategorySelect();
+            updateProductSelection();
+          }, {
+            onlyOnce: false
+          });
+        }
+      }
+
+      function updateCategorySelect() {
+        const filterCategorySale = document.getElementById("filterCategorySale");
+        filterCategorySale.innerHTML = '<option value="Todas">Todas as Categorias</option>' +
+          Object.entries(categoriesDatabase).map(([id, category]) =>
+            `<option value="${id}">${category.nome}</option>`
+          ).join('');
+      }
+
+      // Carregar clientes
+      function loadClientsFromDatabase() {
+        const user = auth.currentUser;
+        if (user) {
+          const clientsRef = ref(db, `clientes/${user.uid}`);
+          onValue(clientsRef, (snapshot) => {
+            clientsDatabase = snapshot.exists() ? snapshot.val() : {};
+            updateClientSelect();
+          }, {
+            onlyOnce: false
+          });
+        }
+      }
+
+      function updateClientSelect() {
+        const selectClientSale = document.getElementById("selectClientSale");
+        selectClientSale.innerHTML = '<option value="">Sem Cliente</option>' +
+          Object.entries(clientsDatabase).map(([id, client]) =>
+            `<option value="${id}">${client.nome}</option>`
+          ).join('');
+      }
+
+      // Carregar produtos
+      function loadProductsFromDatabase() {
+        const user = auth.currentUser;
+        if (user) {
+          const produtosRef = ref(db, `produtos/${user.uid}`);
+          onValue(produtosRef, (snapshot) => {
+            productsDatabase = snapshot.exists() ? snapshot.val() : {};
+            updateProductSelection();
+          }, {
+            onlyOnce: false
+          });
+        }
+      }
+
+      // Atualizar seleção de produtos
+      function updateProductSelection() {
+        const productSelectionDiv = document.getElementById("productSelection");
+        const filteredProducts = selectedCategory === "Todas" ?
+          Object.entries(productsDatabase) :
+          Object.entries(productsDatabase).filter(([_, product]) => product.categoria === selectedCategory);
+
+        productSelectionDiv.innerHTML = filteredProducts.length === 0 ?
+          "<p>Nenhum produto encontrado para esta categoria.</p>" :
+          filteredProducts.map(([barcode, product]) => `
+          <div class="product-card">
+            <h4>${product.nome}</h4>
+            <p>R$ ${product.preco.toFixed(2).replace('.', ',')} / ${product.unidade === 'kilo' ? 'kg' : 'un'}</p>
+            <p>Estoque: ${(product.estoque || 0).toFixed(3).replace('.', ',')} ${product.unidade === 'kilo' ? 'kg' : 'un'}</p>
+            <div class="quantity-controls">
+              <button onclick="adjustQuantity('${barcode}', -1)">−</button>
+              <input type="number" id="qty-${barcode}" value="0" min="0" step="${product.unidade === 'kilo' ? '0.001' : '1'}" onchange="updateActiveSaleFromSelection('${barcode}', this.value)">
+              <button onclick="adjustQuantity('${barcode}', 1)">+</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      window.adjustQuantity = (barcode, delta) => {
+        const input = document.getElementById(`qty-${barcode}`);
+        const product = productsDatabase[barcode];
+        let newQty = parseFloat(input.value) + delta * (product.unidade === 'kilo' ? 0.001 : 1);
+        if (newQty < 0) newQty = 0;
+        if (newQty > product.estoque) {
+          alert("Quantidade excede o estoque disponível.");
+          return;
+        }
+        input.value = newQty.toFixed(product.unidade === 'kilo' ? 3 : 0);
+        updateActiveSaleFromSelection(barcode, newQty);
+      };
+
+      function updateActiveSaleFromSelection(barcode, quantidade) {
+        const product = productsDatabase[barcode];
+        if (!product) return;
+
+        activeSaleItems = activeSaleItems.filter(item => item.codigo !== barcode);
+
+        if (quantidade > 0) {
+          const preco = product.preco * quantidade;
+          activeSaleItems.push({
+            numero: activeSaleItems.length + 1,
+            codigo: barcode,
+            nome: product.nome,
+            preco: preco,
+            quantidade: quantidade,
+            unidade: product.unidade,
+            categoria: product.categoria
+          });
+        }
+
+        updateActiveSaleDisplay();
+      }
+
+      // Manipulação de entrada de código de barras
+      document.getElementById("barcodeInput").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          const input = this.value.trim();
+          if (input) {
+            if (input.endsWith('*') && !tempWeight) {
+              const weight = parseFloat(input.slice(0, -1)) / 1000;
+              if (isNaN(weight) || weight <= 0) {
+                alert("Gramatura inválida (ex.: 150 *).");
+                return;
+              }
+              tempWeight = weight;
+              alert(`Gramatura ${weight * 1000}g registrada. Digite o código.`);
+              this.value = "";
+              this.placeholder = "Digite o código do produto";
+              setTimeout(() => {
+                if (tempWeight) {
+                  tempWeight = null;
+                  this.placeholder = "Gramatura (150 *) ou Código (2#123456)";
+                  alert("Tempo esgotado. Insira a gramatura novamente.");
+                }
+              }, 30000);
+            } else {
+              let barcode = input;
+              let quantidade = 1;
+              if (input.includes('#')) {
+                const [qty, code] = input.split('#');
+                quantidade = parseInt(qty);
+                barcode = code.trim();
+                if (isNaN(quantidade) || quantidade <= 0 || !code) {
+                  alert("Formato inválido (ex.: 2#123456).");
+                  this.value = "";
+                  return;
+                }
+              }
+              addItemToActiveSale(barcode, quantidade);
+              this.value = "";
+              this.placeholder = "Gramatura (150 *) ou Código (2#123456)";
+            }
+            this.focus();
+          }
+        }
+      });
+
+      function addItemToActiveSale(barcode, quantidade = 1) {
+        let product = productsDatabase[barcode];
+        let preco;
+
+        if (tempWeight) {
+          if (!product || product.unidade !== 'kilo') {
+            alert(`Produto ${barcode} não encontrado ou não é por peso.`);
+            tempWeight = null;
+            document.getElementById("barcodeInput").placeholder = "Gramatura (150 *) ou Código (2#123456)";
+            return;
+          }
+          quantidade = tempWeight;
+          preco = product.preco * quantidade;
+          tempWeight = null;
+        } else if (barcode.startsWith('2') && barcode.length === 13) {
+          const productCode = barcode.slice(1, 7);
+          product = productsDatabase[productCode];
+          if (!product || product.unidade !== 'kilo') {
+            alert(`Produto ${productCode} não encontrado ou não é por peso.`);
+            return;
+          }
+          const priceCents = parseInt(barcode.slice(7, 12));
+          preco = priceCents / 100;
+          quantidade = preco / product.preco;
+        } else {
+          if (!product || product.unidade === 'kilo') {
+            alert(`Produto ${barcode} não encontrado ou requer peso.`);
+            return;
+          }
+          preco = product.preco * quantidade;
+        }
+
+        if (quantidade > product.estoque) {
+          alert("Quantidade excede o estoque disponível.");
+          return;
+        }
+
+        activeSaleItems = activeSaleItems.filter(item => item.codigo !== barcode);
+        activeSaleItems.push({
+          numero: activeSaleItems.length + 1,
+          codigo: barcode,
+          nome: product.nome,
+          preco: preco,
+          quantidade: quantidade,
+          unidade: product.unidade,
+          categoria: product.categoria
+        });
+        updateActiveSaleDisplay();
+        updateProductSelection();
+        document.getElementById(`qty-${barcode}`).value = quantidade.toFixed(product.unidade === 'kilo' ? 3 : 0);
+        document.getElementById("barcodeInput").focus();
+      }
+
+      window.removeItemFromActiveSale = (itemNumber) => {
+        const item = activeSaleItems.find(item => item.numero === itemNumber);
+        if (item) {
+          document.getElementById(`qty-${item.codigo}`).value = "0";
+        }
+        activeSaleItems = activeSaleItems.filter(item => item.numero !== itemNumber).map((item, index) => ({
+          ...item,
+          numero: index + 1
+        }));
+        updateActiveSaleDisplay();
+        document.getElementById("barcodeInput").focus();
+      };
+
+      function updateActiveSaleDisplay() {
+        const itemListDiv = document.getElementById("activeSaleItems");
+        const total = activeSaleItems.reduce((sum, item) => sum + item.preco, 0);
+        itemListDiv.innerHTML = activeSaleItems.length === 0 ?
+          "<p>Nenhum item adicionado.</p>" :
+          activeSaleItems.map(item => `
+          <div class="sale-item">
+            <span>${item.numero}. ${item.nome} (${item.unidade === 'kilo' ? (item.quantidade * 1000).toFixed(0) + 'g' : item.quantidade + ' un'}) - R$ ${item.preco.toFixed(2).replace('.', ',')}</span>
+            <button class="remove-item-btn" onclick="removeItemFromActiveSale(${item.numero})">X</button>
+          </div>
+        `).join('');
+        document.getElementById("currentSaleTotal").textContent = `Total: R$ ${total.toFixed(2).replace('.', ',')}`;
+        document.getElementById("finalizarVendaBtn").disabled = activeSaleItems.length === 0;
+      }
+
+      document.getElementById("filterCategorySale").onchange = function() {
+        selectedCategory = this.value;
+        updateProductSelection();
+      };
+
+      document.getElementById("selectClientSale").onchange = function() {
+        selectedClient = this.value;
+        document.getElementById("modalClientName").textContent = selectedClient ? clientsDatabase[selectedClient]?.nome || "Sem Cliente" : "Sem Cliente";
+      };
+
+      document.getElementById("finalizarVendaBtn").onclick = () => {
+        if (activeSaleItems.length === 0) {
+          alert("Adicione itens à venda.");
+          return;
+        }
+        const total = activeSaleItems.reduce((sum, item) => sum + item.preco, 0);
+        appliedDiscount = 0;
+        document.getElementById("modalTotalValue").textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
+        document.getElementById("modalTotalWithDiscount").textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
+        document.getElementById("modalClientName").textContent = selectedClient ? clientsDatabase[selectedClient]?.nome || "Sem Cliente" : "Sem Cliente";
+        document.getElementById("discountInput").value = "";
+        document.getElementById("saleObservations").value = "";
+        document.getElementById("paymentModal").style.display = "block";
+        document.getElementById("amountGivenContainer").style.display = "none";
+        document.getElementById("modalPaymentType").value = "Pix";
+      };
+
+      document.querySelector(".close-button").onclick = () => {
+        document.getElementById("paymentModal").style.display = "none";
+        tempWeight = null;
+        appliedDiscount = 0;
+        document.getElementById("barcodeInput").placeholder = "Gramatura (150 *) ou Código (2#123456)";
+        document.getElementById("barcodeInput").focus();
+      };
+
+      document.getElementById("modalPaymentType").onchange = function() {
+        document.getElementById("amountGivenContainer").style.display = this.value === "Dinheiro" ? "block" : "none";
+        document.getElementById("changeDue").textContent = "R$ 0,00";
+        document.getElementById("amountGiven").value = "";
+      };
+
+      document.getElementById("discountInput").oninput = function() {
+        const total = activeSaleItems.reduce((sum, item) => sum + item.preco, 0);
+        const discountInput = this.value.trim();
+        let discountValue = 0;
+
+        if (discountInput) {
+          if (discountInput.endsWith("%")) {
+            const percentage = parseFloat(discountInput.slice(0, -1));
+            if (!isNaN(percentage) && percentage >= 0 && percentage <= 100) {
+              discountValue = (total * percentage) / 100;
+            } else {
+              alert("Percentual inválido (0-100).");
+              this.value = "";
+              discountValue = 0;
+            }
+          } else {
+            discountValue = parseFloat(discountInput.replace(',', '.'));
+            if (isNaN(discountValue) || discountValue < 0) {
+              alert("Desconto inválido.");
+              this.value = "";
+              discountValue = 0;
+            }
+          }
+        }
+
+        appliedDiscount = discountValue;
+        const totalWithDiscount = total - discountValue;
+        if (totalWithDiscount < 0) {
+          alert("Desconto não pode ser maior que o total.");
+          this.value = "";
+          appliedDiscount = 0;
+          document.getElementById("modalTotalWithDiscount").textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
+        } else {
+          document.getElementById("modalTotalWithDiscount").textContent = `R$ ${totalWithDiscount.toFixed(2).replace('.', ',')}`;
+        }
+
+        if (document.getElementById("modalPaymentType").value === "Dinheiro") {
+          const amountGiven = parseFloat(document.getElementById("amountGiven").value) || 0;
+          const change = amountGiven - totalWithDiscount;
+          document.getElementById("changeDue").textContent = `R$ ${change.toFixed(2).replace('.', ',')}`;
+          document.getElementById("confirmPaymentBtn").disabled = amountGiven < totalWithDiscount;
+        }
+      };
+
+      document.getElementById("amountGiven").oninput = function() {
+        const total = activeSaleItems.reduce((sum, item) => sum + item.preco, 0);
+        const totalWithDiscount = total - appliedDiscount;
+        const amountGiven = parseFloat(this.value) || 0;
+        const change = amountGiven - totalWithDiscount;
+        document.getElementById("changeDue").textContent = `R$ ${change.toFixed(2).replace('.', ',')}`;
+        document.getElementById("confirmPaymentBtn").disabled = amountGiven < totalWithDiscount;
+      };
+
+      document.getElementById("confirmPaymentBtn").onclick = () => {
+        const total = activeSaleItems.reduce((sum, item) => sum + item.preco, 0);
+        const totalWithDiscount = total - appliedDiscount;
+        const paymentType = document.getElementById("modalPaymentType").value;
+        const amountGiven = parseFloat(document.getElementById("amountGiven").value) || 0;
+        const dataVenda = updateDataVenda();
+        const observations = document.getElementById("saleObservations").value.trim();
+
+        if (paymentType === "Dinheiro" && amountGiven < totalWithDiscount) {
+          alert("Valor recebido insuficiente.");
+          return;
+        }
+
+        const user = auth.currentUser;
+        if (user) {
+          const updates = {};
+          activeSaleItems.forEach(item => {
+            const productCode = item.codigo.startsWith('2') && item.codigo.length === 13 ? item.codigo.slice(1, 7) : item.codigo;
+            const currentStock = productsDatabase[productCode]?.estoque || 0;
+            updates[`produtos/${user.uid}/${productCode}/estoque`] = currentStock - item.quantidade;
+          });
+
+          const saleData = {
+            dataVenda,
+            valorTotal: totalWithDiscount,
+            valorOriginal: total,
+            desconto: appliedDiscount,
+            tipoPagamento: paymentType,
+            clienteId: selectedClient || null,
+            clienteNome: selectedClient ? clientsDatabase[selectedClient]?.nome || null : null,
+            items: activeSaleItems.map(item => ({
+              codigo: item.codigo,
+              nome: item.nome,
+              preco: item.preco,
+              quantidade: item.quantidade,
+              unidade: item.unidade,
+              categoria: item.categoria
+            })),
+            observacoes: observations || "Venda PDV"
+          };
+
+          const newSaleRef = push(ref(db, `vendas/${user.uid}`));
+          Promise.all([set(newSaleRef, saleData), update(ref(db), updates)])
+            .then(() => {
+              alert("Venda registrada!");
+              printSaleReceipt(saleData, amountGiven);
+              cancelActiveSale();
+              document.getElementById("paymentModal").style.display = "none";
+              loadProductsFromDatabase();
+            })
+            .catch((err) => alert("Erro ao registrar venda: " + err.message));
+        }
+      };
+
+      document.getElementById("cancelSaleBtn").onclick = () => {
+        if (confirm("Cancelar venda atual?")) {
+          cancelActiveSale();
+          alert("Venda cancelada.");
+        }
+      };
+
+      function cancelActiveSale() {
+        activeSaleItems = [];
+        tempWeight = null;
+        appliedDiscount = 0;
+        selectedClient = "";
+        document.getElementById("selectClientSale").value = "";
+        updateActiveSaleDisplay();
+        updateProductSelection();
+        document.getElementById("barcodeInput").value = "";
+        document.getElementById("barcodeInput").placeholder = "Gramatura (150 *) ou Código (2#123456)";
+        document.getElementById("barcodeInput").focus();
+      }
+
+      function printSaleReceipt(sale, amountGiven) {
+        const {
+          jsPDF
+        } = window.jspdf;
+        const doc = new jsPDF();
+        let yPos = 10;
+        const margin = 10;
+
+        doc.setFontSize(14);
+        doc.text("Batavo", doc.internal.pageSize.getWidth() / 2, yPos, {
+          align: 'center'
+        });
+        yPos += 7;
+        doc.setFontSize(10);
+        doc.text(`Data: ${new Date(sale.dataVenda).toLocaleString('pt-BR')}`, margin, yPos);
+        if (sale.clienteNome) {
+          yPos += 7;
+          doc.text(`Cliente: ${sale.clienteNome}`, margin, yPos);
+        }
+        yPos += 7;
+        doc.text("-".repeat(40), margin, yPos);
+        yPos += 7;
+
+        sale.items.forEach(item => {
+          const quantidadeDisplay = item.unidade === 'kilo' ? `${(item.quantidade * 1000).toFixed(0)}g` : `${item.quantidade} un`;
+          doc.text(`${item.numero}. ${item.nome} (${quantidadeDisplay})`, margin, yPos);
+          doc.text(`R$ ${item.preco.toFixed(2).replace('.', ',')}`, doc.internal.pageSize.getWidth() - margin, yPos, {
+            align: 'right'
+          });
+          yPos += 7;
+        });
+
+        doc.text("-".repeat(40), margin, yPos);
+        yPos += 7;
+        if (sale.desconto > 0) {
+          doc.text(`Subtotal: R$ ${sale.valorOriginal.toFixed(2).replace('.', ',')}`, margin, yPos);
+          yPos += 7;
+          doc.text(`Desconto: R$ ${sale.desconto.toFixed(2).replace('.', ',')}`, margin, yPos);
+          yPos += 7;
+        }
+        doc.text(`TOTAL: R$ ${sale.valorTotal.toFixed(2).replace('.', ',')}`, margin, yPos);
+        doc.text(`Pagamento: ${sale.tipoPagamento}`, margin, yPos + 7);
+        if (sale.observacoes && sale.observacoes !== "Venda PDV") {
+          yPos += 14;
+          doc.text(`Observações: ${sale.observacoes}`, margin, yPos);
+        }
+        yPos += 14;
+
+        if (sale.tipoPagamento === "Dinheiro") {
+          const change = amountGiven - sale.valorTotal;
+          doc.text(`Valor Recebido: R$ ${amountGiven.toFixed(2).replace('.', ',')}`, margin, yPos);
+          yPos += 7;
+          doc.text(`Troco: R$ ${change.toFixed(2).replace('.', ',')}`, margin, yPos);
+          yPos += 7;
+        }
+
+        doc.text("Obrigado!", doc.internal.pageSize.getWidth() / 2, yPos + 7, {
+          align: 'center'
+        });
+        doc.save(`venda_${new Date(sale.dataVenda).getTime()}.pdf`);
+      }
+    </script>
+
+  </body>
+
+</html>
